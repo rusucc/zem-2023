@@ -118,6 +118,7 @@ void setup()
 
 }
 void setID() {
+  // resetarea pinurilor pentru i2c
   // all reset
   digitalWrite(SHT_LOX1, LOW);    
   digitalWrite(SHT_LOX2, LOW);
