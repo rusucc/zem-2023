@@ -2,39 +2,35 @@
 Rusu Cosmin, Dogaru Paul, Zem 2023 LineFollower
 
 Pini Senzori : D4,D5,D6,D7,D8,D9, Emiter Pin
-Pini Led : D2, D15
+Pini Led : D2, D15, D13 Lumina
 Pini Motor(A si B) : D10,D11
-Pini Senzori laterali : A6,A7 I2C, A0,A1 XSHUT
-Pini Liberi : A2->A5,  
+Pini Senzori laterali : A4,SDA, A5 SCL, A2,A3 XSHUT
+Pini Liberi : D13 da trebuie scos ala de led pt calibrare
 */
 #include <QTRSensors.h>
 #include <Adafruit_VL53L0X.h>
 //constante PID
 #define SPEED 100
-#define KP 0
+#define KP 1
 #define KI 0
 #define KD 0
 //constante senzori laterali
 #define L1_ADDRESS 0x30
 #define L2_ADDRESS 0x31
-#define SHT_LOX1 A0
-#define SHT_LOX2 A1
+#define SHT_LOX1 A2
+#define SHT_LOX2 A3
 //constante senzori pololu
 #define SensorCount 6
 #define SensorStart 4
 #define SensorEmitter 3
 //leduri
-#define LedA null
-#define LedB null
+#define LedA 2
+#define LedB 12
 //motoare
-#define In1A null
-#define In2A null
-#define In1B null
-#define In2B null
 #define motorA 10
 #define motorB 11
 //debug
-const bool DEBUG_MODE = false;
+const bool DEBUG_MODE = true;
 //senzori pololu
 QTRSensors qtr;
 uint16_t sensorValues[SensorCount];
@@ -52,9 +48,9 @@ void loop()
 {
   uint16_t currentPosition = qtr.readLineBlack(sensorValues);
   int valPID = PID(2500,currentPosition); //valoare PID output
-  valPID=map(valPID, -2500, 2500, 0,255);
-  analogWrite(motorA,SPEED-valPID);
-  analogWrite(motorB,SPEED+valPID);
+  valPID=map(valPID, -2500, 2500, SPEED,255-SPEED);
+  //analogWrite(motorA,SPEED-valPID);
+  //analogWrite(motorB,SPEED+valPID);
   delay(100);
   if(DEBUG_MODE){
     for (uint8_t i = 0; i < SensorCount; i++){
@@ -85,8 +81,9 @@ void setup()
   delay(500);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+  Serial.println("Incepere calibrare");
   //calibrare, ledul de pe arduino e pornit
-  for (uint16_t i = 0; i < 400; i++){
+  for (uint16_t i = 0; i < 200; i++){
     qtr.calibrate();
   }
   digitalWrite(LED_BUILTIN, LOW);
@@ -107,6 +104,7 @@ void setup()
     Serial.println();
     delay(1000);
   }
+  /*
   pinMode(SHT_LOX1, OUTPUT);
   pinMode(SHT_LOX2, OUTPUT);
   if(DEBUG_MODE) Serial.println(F("Shutdown pins inited..."));
@@ -115,6 +113,7 @@ void setup()
   if(DEBUG_MODE) Serial.println(F("Both in reset mode...(pins are low)"));
   if(DEBUG_MODE) Serial.println(F("Starting..."));
   setID();
+  */
 
 }
 void setID() {
