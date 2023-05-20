@@ -2,35 +2,38 @@
 Rusu Cosmin, Dogaru Paul, Zem 2023 LineFollower
 
 Pini Senzori : D4,D5,D6,D7,D8,D9, Emiter Pin
-Pini Led : D2, D15, D13 Lumina
+Pini Led : D2, D15
 Pini Motor(A si B) : D10,D11
-Pini Senzori laterali : A4,SDA, A5 SCL, A2,A3 XSHUT
-Pini Liberi : D13 da trebuie scos ala de led pt calibrare
+Pini Senzori laterali : A6,A7 I2C, A0,A1 XSHUT
+Pini Liberi : A2->A5,  
 */
 #include <QTRSensors.h>
 #include <Adafruit_VL53L0X.h>
 //constante PID
-#define SPEED 100
-#define KP 1
-#define KI 0
-#define KD 0
+//debug
+const bool DEBUG_MODE = false ;
+
+#define SPEED 180 //190
+#define KP 0.010 //0.01 
+#define KI 0.00025 //0.003
+#define KD 0.0025 //0.03
 //constante senzori laterali
 #define L1_ADDRESS 0x30
 #define L2_ADDRESS 0x31
-#define SHT_LOX1 A2
-#define SHT_LOX2 A3
+#define SHT_LOX1 A0
+#define SHT_LOX2 A1
 //constante senzori pololu
 #define SensorCount 6
 #define SensorStart 4
-#define SensorEmitter 3
+#define SensorEmitter 13 //initial D3!!!!
+#define TCALIBRARE 100
 //leduri
 #define LedA 2
 #define LedB 12
 //motoare
 #define motorA 10
 #define motorB 11
-//debug
-const bool DEBUG_MODE = true;
+
 //senzori pololu
 QTRSensors qtr;
 uint16_t sensorValues[SensorCount];
@@ -43,14 +46,52 @@ VL53L0X_RangingMeasurementData_t measure2;
 void setup();
 void setID();
 void read_dual_sensors();
-int PID();
+int PID(int targetPosition, int currentPosition){
+  //Serial.println("POZ:"+String(currentPosition));
+  static int INTEGRAL = 0;
+  static int delta_vechi = 0;
+  double delta = currentPosition - targetPosition;
+  INTEGRAL += delta;
+  double P = KP * delta;
+  double I = KI * INTEGRAL;
+  double D = KD * (delta-delta_vechi);
+  delta_vechi = delta;
+  int SUM = P+I+D;
+  Serial.println("P: "+String(P)+" | I:"+String(I) + " | D:"+String(D)+ " | " + String(SUM));
+  Serial.print("SUM: "),Serial.println(SUM);
+  return SUM;
+  
+}
 void loop()
 {
   uint16_t currentPosition = qtr.readLineBlack(sensorValues);
-  int valPID = PID(2500,currentPosition); //valoare PID output
-  valPID=map(valPID, -2500, 2500, SPEED,255-SPEED);
-  //analogWrite(motorA,SPEED-valPID);
-  //analogWrite(motorB,SPEED+valPID);
+  int valPID;
+  valPID = PID(2500,currentPosition); //valoare PID output
+  //Serial.println(valPID);
+  int valA = SPEED + valPID;
+  int valB = SPEED - valPID;
+  if(valA<128) valA=128;
+  if(valB<128) valB=128;
+  if(valA>255) valA = 255;
+  if(valB>255) valB = 255;
+  //Serial.println(String(valA)+" "+String(valB));
+  analogWrite(motorA,valA);
+  analogWrite(motorB,valB);
+  /*
+  bool kill = true;
+  for (uint8_t i = 0; i < SensorCount; i++)
+  {
+    //Serial.print(sensorValues[i]);
+    //Serial.print('\t');
+    kill = kill and (sensorValues[i]>750);
+  }
+  //Serial.println();
+  while(kill){
+    analogWrite(motorA, 127);
+    analogWrite(motorB, 127);
+    Serial.println("STOP");
+  }
+  //kill */
   delay(100);
   if(DEBUG_MODE){
     for (uint8_t i = 0; i < SensorCount; i++){
@@ -61,32 +102,25 @@ void loop()
     Serial.print(currentPosition),Serial.print("| Valoare PID: "),Serial.println(valPID);
   }
 }
-int PID(int targetPosition, int currentPosition){
-  static int INTEGRAL = 0;
-  static int delta_vechi = 0;
-  int delta = currentPosition - targetPosition;
-  INTEGRAL += delta;
-  int P = KP * delta;
-  int I = KI * INTEGRAL;
-  int D = KD * (delta-delta_vechi);
-  delta_vechi = delta;
-  return P+I+D;
-}
+
 void setup()
 {
   // configure the sensors
+  analogWrite(motorA, 127);
+  analogWrite(motorB, 127);
   qtr.setTypeRC();
   qtr.setSensorPins((const uint8_t[]){SensorStart, SensorStart + 1, SensorStart + 2, SensorStart + 3, SensorStart + 4, SensorStart+5}, SensorCount);
   qtr.setEmitterPin(SensorEmitter);
   delay(500);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  Serial.println("Incepere calibrare");
+  pinMode(LedA, OUTPUT);
+  digitalWrite(LedA, HIGH);
   //calibrare, ledul de pe arduino e pornit
-  for (uint16_t i = 0; i < 200; i++){
+  for (uint16_t i = 0; i < TCALIBRARE; i++){
     qtr.calibrate();
   }
-  digitalWrite(LED_BUILTIN, LOW);
+  
+  digitalWrite(LedA, LOW);
+  delay(2000);
   //oprire calibrare, led oprit
   Serial.begin(9600);
   if(DEBUG_MODE){
