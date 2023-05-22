@@ -5,7 +5,7 @@ Pini Senzori : D4,D5,D6,D7,D8,D9, Emiter Pin
 Pini Led : D2, D15
 Pini Motor(A si B) : D10,D11
 Pini Senzori laterali : A6,A7 I2C, A0,A1 XSHUT
-Pini Liberi : A2->A5,  
+Pini Liberi : A2->A5
 */
 #include <QTRSensors.h>
 #include <Adafruit_VL53L0X.h>
@@ -14,12 +14,12 @@ Pini Liberi : A2->A5,
 const bool DEBUG_MODE = false ;
 
 #define SPEED 178 //190
-#define KP 0.01 //0.01 
+#define KP 0.008 //0.01 
 #define KI 0.00 //0.003
-#define KD 0.01 //0.03
+#define KD 0.03 //0.03
 #define NOISE 40
-#define BOOST 30
-#define DELTASPEED 8
+#define BOOST 20
+#define DELTASPEED 4
 //constante senzori laterali
 #define L1_ADDRESS 0x30
 #define L2_ADDRESS 0x31
@@ -32,8 +32,8 @@ const bool DEBUG_MODE = false ;
 #define TCALIBRARE 100
 #define THRESHOLD 900
 //leduri
-#define LedA 2
-#define LedB 12
+#define LedA A7
+#define LedB A0
 //motoare
 #define motorA 10
 #define motorB 11
@@ -64,8 +64,8 @@ int PID(int targetPosition, int currentPosition){
   double D = KD * (delta-delta_vechi);
   delta_vechi = delta;
   int SUM = P+I+D;
-  Serial.println("P: "+String(P)+" | I:"+String(I) + " | D:"+String(D)+ " | " + String(SUM));
-  Serial.print("SUM: "),Serial.println(SUM);
+  //Serial.println("P: "+String(P)+" | I:"+String(I) + " | D:"+String(D)+ " | " + String(SUM));
+  //Serial.print("SUM: "),Serial.println(SUM);
   return SUM;
   
 }
@@ -82,8 +82,8 @@ void loop()
   else adder = 0;
   int valA = SPEED + valPID + adder;
   int valB = SPEED - valPID + adder;
-  if(valA<128) valA=128;
-  if(valB<128) valB=128;
+  if(valA<128 or DEBUG_MODE) valA=128;
+  if(valB<128 or DEBUG_MODE) valB=128;
   if(valA>255) valA = 255;
   if(valB>255) valB = 255;
   //Serial.println(String(valA)+" "+String(valB));
@@ -126,12 +126,15 @@ void setup()
   delay(500);
   pinMode(LedA, OUTPUT);
   digitalWrite(LedA, HIGH);
+  pinMode(LedB, OUTPUT);
+  digitalWrite(LedB, HIGH);
   //calibrare, ledul de pe arduino e pornit
   for (uint16_t i = 0; i < TCALIBRARE; i++){
     qtr.calibrate();
   }
   
   digitalWrite(LedA, LOW);
+  digitalWrite(LedB, LOW);
   delay(2000);
   //oprire calibrare, led oprit
   Serial.begin(9600);
@@ -223,6 +226,7 @@ int lineCase(){
     if(wallL) return 5;
     if(wallR) return 6;
   }
+  return 0;
 }
 void read_dual_sensors() {
   
