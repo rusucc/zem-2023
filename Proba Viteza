@@ -1,0 +1,162 @@
+/*
+Rusu Cosmin, Dogaru Paul, Zem 2023 LineFollower
+
+Pini Senzori : D4,D5,D6,D7,D8,D9, Emiter Pin
+Pini Led : D2, D15
+Pini Motor(A si B) : D10,D11
+Pini Senzori laterali : A6,A7 I2C, A0,A1 XSHUT
+Pini Liberi : A2->A5,  
+*/
+#include <QTRSensors.h>
+//constante PID
+//debug
+const bool DEBUG_SENZORI = true;
+const bool DEBUG_PID = false ;
+const bool DEBUG_APELURI = false ;
+
+#define SPEED 175 //190
+#define KP 3.2 //2.1 
+#define KI 0//0.003
+#define KD 2 //2
+#define NOISE 1 //delta < pt care e ignorat, 1 e anulzat oricum
+#define BOOST 6 // step la boost, trepte, adder maxim e boost * threshold, grija
+#define THRESHOLD 3 //valoare pentru care PID incepe sa accelereze, a max la 0
+#define MIN_MOTOR 127 // valoare minima pt motor, daca e sub 127 se poate intoarce
+//constante senzori laterali
+#define KPL 1
+#define KDL 1
+#define KIL 1
+//constante senzori pololu
+#define SensorCount 6
+#define SensorStart 4
+#define SensorEmitter 3
+#define TCALIBRARE 100
+//leduri
+#define LedA A2
+#define LedB A7
+//
+#define IR 12
+//motoare
+#define motorA 10
+#define motorB 11
+//intersectie
+#define t_inter 600 //mers in fata
+#define speed_inter 170 //mers in fata
+#define speed_turn 20 // viteza cu care se intoarce
+
+//senzori pololu
+QTRSensors qtr;
+uint16_t sensorValues[SensorCount];
+
+//senzori laterali
+
+void setup();
+
+void intersection();
+int PID(int targetPosition, int currentPosition){
+  //Serial.println("POZ:"+String(currentPosition));
+  static int INTEGRAL = 0;
+  static int delta_vechi = 0;
+  double delta = currentPosition - targetPosition;
+  if(abs(delta)<NOISE) delta = 0;
+  INTEGRAL += delta;
+  double P = KP * delta;
+  double I = KI * INTEGRAL;
+  double D = KD * (delta-delta_vechi);
+  delta_vechi = delta;
+  int SUM = P+I+D;
+  if(DEBUG_PID){
+    Serial.print("P:"+String(P)+" | I:"+String(I) + " | D:"+String(D)+ " | ");
+    Serial.print("SUM: "),Serial.println(SUM);
+  }
+  return SUM;
+  
+}
+void loop()
+{
+  uint16_t currentPosition = qtr.readLineBlack(sensorValues);
+  currentPosition/=250;
+  go_forward(currentPosition);
+  delay(20);
+}
+
+void setup()
+{
+  // configure the sensors
+  analogWrite(motorA, 127);
+  analogWrite(motorB, 127);
+  qtr.setTypeRC();
+  qtr.setSensorPins((const uint8_t[]){SensorStart, SensorStart + 1, SensorStart + 2, SensorStart + 3, SensorStart + 4, SensorStart+5}, SensorCount);
+  qtr.setEmitterPin(SensorEmitter);
+  delay(500);
+  pinMode(LedA, OUTPUT),digitalWrite(LedA, HIGH);
+  //calibrare, ledul de pe arduino e pornit
+  for (uint16_t i = 0; i < TCALIBRARE; i++) qtr.calibrate();
+  digitalWrite(LedA, LOW),delay(1000);
+  //oprire calibrare, led oprit
+  Serial.begin(9600);
+  if(DEBUG_SENZORI){
+    for (uint8_t i = 0; i < SensorCount; i++){
+      Serial.print(qtr.calibrationOn.minimum[i]);
+      Serial.print(' ');
+      }
+    Serial.println();
+    // print the calibration maximum values measured when emitters were on
+    for (uint8_t i = 0; i < SensorCount; i++){
+      Serial.print(qtr.calibrationOn.maximum[i]);
+      Serial.print(' ');
+    }
+    Serial.println();
+    Serial.println();
+    delay(1000);
+  }
+}
+void turn_right(){
+  analogWrite(motorA,127),analogWrite(motorB,127);
+  int linie = digitalRead(IR);
+  Serial.println(linie);
+  while(linie == 1){//0 linie
+      qtr.readLineBlack(sensorValues);
+      if(sensorValues[3]>900 or sensorValues[2]>900) linie = 0;
+      if(linie){
+        analogWrite(motorA, 100),analogWrite(motorB, 154+speed_turn);
+        delay(100);
+        digitalWrite(LedB,linie*255);
+      }
+  }
+  analogWrite(motorA,127),analogWrite(motorB,127);
+}
+void go_forward(int currentPosition){
+  int valPID = PID(10,currentPosition); //valoare PID output
+  int adder = 0;
+  if(abs(valPID)<THRESHOLD) adder = BOOST * abs(THRESHOLD - valPID);
+  else adder = 0;
+  int valA = SPEED + valPID + adder;
+  int valB = SPEED - valPID + adder;
+  if(valA<MIN_MOTOR) valA=MIN_MOTOR;
+  if(valB<MIN_MOTOR) valB=MIN_MOTOR;
+  if(valA>255) valA = 255;
+  if(valB>255) valB = 255;
+  analogWrite(motorA,valA);
+  analogWrite(motorB,valB);
+}
+void intersection(){
+  //Hard coded, fac eu inainte sa mearga;
+  analogWrite(motorA,speed_inter),analogWrite(motorB,speed_inter);
+  delay(t_inter);
+  analogWrite(motorA,127),analogWrite(motorB,127);
+  bool cruce = false;
+  for(int i = 0; i < SensorCount; i++) if(sensorValues[i]>900) cruce = true;
+  if(!cruce){
+    turn_right();
+    int senzor_linie_dreapta = digitalRead(IR);//0 - linie
+    while(senzor_linie_dreapta){//senzor lateral linie
+      go_forward(qtr.readLineBlack(sensorValues)/250);
+      senzor_linie_dreapta = digitalRead(IR); //digital read 
+    }
+    analogWrite(motorA, 170),analogWrite(motorB, 170);
+    delay(200);
+    analogWrite(motorA, 127),analogWrite(motorB, 127);
+    turn_right();
+  }
+}
